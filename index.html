@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kontrol Dokumen Keluar-Masuk</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .card-container { max-width: 600px; margin: 50px auto; }
+        #docNumber { text-align: center; letter-spacing: 2px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container card-container">
+        <div class="card shadow-lg border-0 rounded-3">
+            <div class="card-header bg-dark text-white text-center py-3">
+                <h4 class="mb-0">Scanner Dokumen Out / In</h4>
+            </div>
+            <div class="card-body p-4">
+                <div id="alertArea"></div>
+                
+                <form id="scanForm">
+                    <div class="mb-4">
+                        <label for="docNumber" class="form-label text-muted">Arahkan Scanner & Scan Barcode Dokumen</label>
+                        <!-- Autofocus agar siap di-scan kapan saja -->
+                        <input type="text" class="form-control form-control-lg" id="docNumber" autocomplete="off" required autofocus>
+                    </div>
+                    <!-- Tombol ini bisa disembunyikan jika murni pakai scanner (scanner otomatis mengirim tombol Enter) -->
+                    <button type="submit" class="btn btn-primary w-100 py-2" id="submitBtn">Proses Dokumen</button>
+                </form>
+                
+                <div class="mt-4 text-center text-muted small">
+                    <i>Data tersimpan otomatis ke Google Spreadsheet</i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // GANTI DENGAN URL WEB APP GOOGLE APPS SCRIPT-MU
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyzotHvrREUqrNuH-4gClLjY3Ev3fv2UQlqR4-9oAjhAEQhCwN6bLwYuyH3KmfQjzGOYQ/exec'; 
+
+        const form = document.getElementById('scanForm');
+        const docInput = document.getElementById('docNumber');
+        const alertArea = document.getElementById('alertArea');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Pastikan input selalu fokus meskipun user mengklik area lain
+        document.addEventListener('click', () => {
+            if(document.activeElement !== docInput) docInput.focus();
+        });
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const docNumber = docInput.value.trim();
+            if (!docNumber) return;
+
+            // State Loading
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Memproses...";
+            docInput.disabled = true;
+            alertArea.innerHTML = "";
+
+            // Kirim data ke GAS
+            fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: new URLSearchParams({ docNumber: docNumber })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let alertHTML = '';
+                if (data.status === 'success') {
+                    // Warna biru untuk OUT, hijau untuk IN
+                    let bgColor = data.type === 'OUT' ? 'alert-info' : 'alert-success';
+                    alertHTML = `<div class="alert ${bgColor} fw-bold text-center">${data.message}</div>`;
+                } else {
+                    // Warna merah untuk Warning/Error
+                    alertHTML = `<div class="alert alert-danger fw-bold text-center fs-5">❌ ${data.message}</div>`;
+                }
+                alertArea.innerHTML = alertHTML;
+            })
+            .catch(error => {
+                alertArea.innerHTML = `<div class="alert alert-danger text-center">Gagal terhubung ke database. Periksa koneksi internet.</div>`;
+            })
+            .finally(() => {
+                // Reset input untuk scan berikutnya
+                docInput.value = '';
+                docInput.disabled = false;
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Proses Dokumen";
+                docInput.focus();
+            });
+        });
+    </script>
+</body>
+</html>
