@@ -63,10 +63,7 @@
             alertArea.innerHTML = "";
 
             // Kirim data ke GAS
-            fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: new URLSearchParams({ docNumber: docNumber })
-            })
+            fetch(`${SCRIPT_URL}?docNumber=${docNumber}`)
             .then(response => response.json())
             .then(data => {
                 let alertHTML = '';
