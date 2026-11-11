@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kontrol Dokumen Keluar-Masuk</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Load Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f4f6f9; }
@@ -23,8 +22,6 @@
             </div>
             <div class="card-body p-4">
                 <div class="row">
-                    
-                    <!-- Kolom Kiri: Form Scanner -->
                     <div class="col-md-7 border-end pe-md-4">
                         <div id="alertArea"></div>
                         <form id="scanForm">
@@ -38,26 +35,21 @@
                             <i>Data otomatis tersimpan ke Google Spreadsheet</i>
                         </div>
                     </div>
-
-                    <!-- Kolom Kanan: Statistik & Pie Chart -->
                     <div class="col-md-5 ps-md-4 text-center mt-4 mt-md-0">
                         <h5 class="text-secondary mb-3">Statistik Dokumen</h5>
                         <div class="chart-container">
                             <canvas id="statsChart"></canvas>
                         </div>
-                        <div id="textStats" class="stats-text text-secondary">
-                            Memuat data...
-                        </div>
+                        <div id="textStats" class="stats-text text-secondary">Memuat data...</div>
                     </div>
-
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // GANTI DENGAN URL WEB APP GOOGLE APPS SCRIPT YANG BARU
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwTzd2aiZsWHRmG0zWC1wlBKYiCWCxGmOjQomURUtNrqKpl3yaOzJ8JrZJ7zwK0vdnfGQ/exec'; 
+        // GANTI DENGAN URL DEPLOYMENT BARU KAMU
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyP8TXGguOpaFWFLJxo7kTnqjZLX2xTPElt4Tug58eBh47DpyNE79kbKByNIz1upYWxwg/exec'; 
 
         const form = document.getElementById('scanForm');
         const docInput = document.getElementById('docNumber');
@@ -67,30 +59,18 @@
         
         let pieChart;
 
-        // Inisialisasi Chart.js
         function initChart() {
             const ctx = document.getElementById('statsChart').getContext('2d');
             pieChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: ['Selesai (IN)', 'Belum Kembali (OUT)'],
-                    datasets: [{
-                        data: [0, 0],
-                        backgroundColor: ['#198754', '#ffc107'], // Hijau (IN), Kuning (OUT)
-                        hoverOffset: 4
-                    }]
+                    datasets: [{ data: [0, 0], backgroundColor: ['#198754', '#ffc107'], hoverOffset: 4 }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
             });
         }
 
-        // Update data Chart & Teks Persentase
         function updateStats(inCount, outCount) {
             pieChart.data.datasets[0].data = [inCount, outCount];
             pieChart.update();
@@ -100,7 +80,6 @@
                 textStats.innerHTML = "Belum ada data dokumen.";
                 return;
             }
-
             let inPercent = Math.round((inCount / total) * 100);
             let outPercent = Math.round((outCount / total) * 100);
             
@@ -111,22 +90,29 @@
             `;
         }
 
-        // Jalankan saat web pertama kali dibuka
         initChart();
-        fetch(`${SCRIPT_URL}?action=getStats`)
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    updateStats(data.stats.in, data.stats.out);
+
+        // 1. Fetch Statistik dengan fitur anti-crash
+        fetch(`${SCRIPT_URL}?action=getStats`, { method: 'GET', redirect: 'follow' })
+            .then(res => res.text()) // Ambil teks mentah dulu untuk keamanan
+            .then(text => {
+                try {
+                    const data = JSON.parse(text); // Coba ubah ke JSON
+                    if(data.status === 'success') {
+                        updateStats(data.stats.in, data.stats.out);
+                    } else {
+                        textStats.innerHTML = `<span class="text-danger">${data.message}</span>`;
+                    }
+                } catch(err) {
+                    textStats.innerHTML = `<span class="text-danger">Akses Ditolak: Pastikan URL benar & Deployment "Anyone"</span>`;
                 }
-            }).catch(err => { textStats.innerHTML = "Gagal memuat statistik."; });
+            })
+            .catch(err => { textStats.innerHTML = `<span class="text-danger">Gagal memuat statistik.</span>`; });
 
         // Paksa input tetap fokus
-        document.addEventListener('click', () => {
-            if(document.activeElement !== docInput) docInput.focus();
-        });
+        document.addEventListener('click', () => { if(document.activeElement !== docInput) docInput.focus(); });
 
-        // Proses submit form
+        // 2. Fetch Form Scan
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             const docNumber = docInput.value.trim();
@@ -137,26 +123,26 @@
             docInput.disabled = true;
             alertArea.innerHTML = "";
 
-            // Gunakan metode GET untuk menghindari error CORS
-            fetch(`${SCRIPT_URL}?docNumber=${encodeURIComponent(docNumber)}`)
-            .then(response => response.json())
-            .then(data => {
-                let alertHTML = '';
-                if (data.status === 'success') {
-                    let bgColor = data.type === 'OUT' ? 'alert-info' : 'alert-success';
-                    alertHTML = `<div class="alert ${bgColor} fw-bold text-center">${data.message}</div>`;
-                } else {
-                    alertHTML = `<div class="alert alert-danger fw-bold text-center">❌ ${data.message}</div>`;
-                }
-                alertArea.innerHTML = alertHTML;
-                
-                // Update chart berdasarkan balasan dari server
-                if (data.stats) {
-                    updateStats(data.stats.in, data.stats.out);
+            fetch(`${SCRIPT_URL}?docNumber=${encodeURIComponent(docNumber)}`, { method: 'GET', redirect: 'follow' })
+            .then(response => response.text()) // Ambil teks mentah
+            .then(text => {
+                try {
+                    const data = JSON.parse(text);
+                    if (data.status === 'success') {
+                        let bgColor = data.type === 'OUT' ? 'alert-info' : 'alert-success';
+                        alertArea.innerHTML = `<div class="alert ${bgColor} fw-bold text-center">${data.message}</div>`;
+                    } else {
+                        alertArea.innerHTML = `<div class="alert alert-danger fw-bold text-center">❌ ${data.message}</div>`;
+                    }
+                    
+                    if (data.stats) updateStats(data.stats.in, data.stats.out);
+                } catch (e) {
+                    // Jika script GAS error parah/salah link, ini akan memunculkannya.
+                    alertArea.innerHTML = `<div class="alert alert-danger text-center">Gagal parsing data. Pastikan URL Web App benar dan di-deploy "Anyone".</div>`;
                 }
             })
             .catch(error => {
-                alertArea.innerHTML = `<div class="alert alert-danger text-center">Gagal terhubung ke database.</div>`;
+                alertArea.innerHTML = `<div class="alert alert-danger text-center">Koneksi Terputus. Periksa internet.</div>`;
             })
             .finally(() => {
                 docInput.value = '';
