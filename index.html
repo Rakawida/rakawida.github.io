@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kontrol Dokumen Keluar-Masuk</title>
+    <title>Kontrol Dokumen & Tim</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f4f6f9; }
         .main-container { max-width: 900px; margin: 40px auto; }
-        #docNumber { text-align: center; letter-spacing: 2px; font-weight: bold; }
+        .input-scan { text-align: center; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem; }
         .chart-container { position: relative; height: 250px; width: 100%; display: flex; justify-content: center; }
         .stats-text { font-size: 1.1rem; font-weight: bold; margin-top: 15px; }
     </style>
@@ -18,28 +18,36 @@
     <div class="container main-container">
         <div class="card shadow-lg border-0 rounded-3">
             <div class="card-header bg-dark text-white text-center py-3">
-                <h4 class="mb-0">Scanner Dokumen Out / In</h4>
+                <h4 class="mb-0">Scanner Dokumen & Tim (Out / In)</h4>
             </div>
             <div class="card-body p-4">
                 <div class="row">
+                    <!-- Kolom Kiri: Form Scanner -->
                     <div class="col-md-7 border-end pe-md-4">
                         <div id="alertArea"></div>
                         <form id="scanForm">
-                            <div class="mb-4">
-                                <label for="docNumber" class="form-label text-muted">Arahkan Scanner & Scan Barcode</label>
-                                <input type="text" class="form-control form-control-lg border-primary" id="docNumber" autocomplete="off" required autofocus>
+                            <div class="mb-3">
+                                <label for="docNumber" class="form-label text-secondary fw-bold">1. Scan Barcode Dokumen:</label>
+                                <input type="text" class="form-control form-control-lg border-primary input-scan" id="docNumber" autocomplete="off" required autofocus>
                             </div>
-                            <button type="submit" class="btn btn-primary w-100 py-2" id="submitBtn">Proses Dokumen</button>
+                            
+                            <div class="mb-4">
+                                <label for="timName" class="form-label text-secondary fw-bold">2. Scan Barcode TIM (Khusus Keluar):</label>
+                                <!-- Field ini default di-disable agar kursor tidak salah tempat -->
+                                <input type="text" class="form-control form-control-lg border-success input-scan" id="timName" autocomplete="off" disabled placeholder="Menunggu dokumen...">
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 py-2 d-none" id="submitBtn">Proses</button>
                         </form>
                         <div class="mt-3 text-center text-muted small">
-                            <i>Data otomatis tersimpan ke Database</i>
+                            <i>Data otomatis tersimpan ke Google Spreadsheet</i>
                         </div>
                     </div>
+
+                    <!-- Kolom Kanan: Statistik -->
                     <div class="col-md-5 ps-md-4 text-center mt-4 mt-md-0">
                         <h5 class="text-secondary mb-3">Statistik Dokumen</h5>
-                        <div class="chart-container">
-                            <canvas id="statsChart"></canvas>
-                        </div>
+                        <div class="chart-container"><canvas id="statsChart"></canvas></div>
                         <div id="textStats" class="stats-text text-secondary">Memuat data...</div>
                     </div>
                 </div>
@@ -48,15 +56,14 @@
     </div>
 
     <script>
-        // GANTI DENGAN URL DEPLOYMENT BARU KAMU
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyP8TXGguOpaFWFLJxo7kTnqjZLX2xTPElt4Tug58eBh47DpyNE79kbKByNIz1upYWxwg/exec'; 
+        // MASUKKAN URL DEPLOYMENT BARU KAMU DI SINI:
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjkK3jGtuly8868iUFHyLnw93WMoMldiFUGjO7bIT0rAcEiE9CnENX2x6WBERtZjo_Qw/exec'; 
 
         const form = document.getElementById('scanForm');
         const docInput = document.getElementById('docNumber');
+        const timInput = document.getElementById('timName');
         const alertArea = document.getElementById('alertArea');
-        const submitBtn = document.getElementById('submitBtn');
         const textStats = document.getElementById('textStats');
-        
         let pieChart;
 
         function initChart() {
@@ -74,82 +81,77 @@
         function updateStats(inCount, outCount) {
             pieChart.data.datasets[0].data = [inCount, outCount];
             pieChart.update();
-
             let total = inCount + outCount;
-            if (total === 0) {
-                textStats.innerHTML = "Belum ada data dokumen.";
-                return;
-            }
+            if (total === 0) { textStats.innerHTML = "Belum ada data."; return; }
             let inPercent = Math.round((inCount / total) * 100);
             let outPercent = Math.round((outCount / total) * 100);
-            
-            textStats.innerHTML = `
-                <span class="text-success">IN: ${inCount} (${inPercent}%)</span> | 
-                <span class="text-warning">OUT: ${outCount} (${outPercent}%)</span><br>
-                <small class="text-muted">Total Dokumen: ${total}</small>
-            `;
+            textStats.innerHTML = `<span class="text-success">IN: ${inCount} (${inPercent}%)</span> | <span class="text-warning">OUT: ${outCount} (${outPercent}%)</span><br><small class="text-muted">Total: ${total}</small>`;
         }
 
         initChart();
 
-        // 1. Fetch Statistik dengan fitur anti-crash
+        // Ambil Statistik Awal
         fetch(`${SCRIPT_URL}?action=getStats`, { method: 'GET', redirect: 'follow' })
-            .then(res => res.text()) // Ambil teks mentah dulu untuk keamanan
-            .then(text => {
-                try {
-                    const data = JSON.parse(text); // Coba ubah ke JSON
-                    if(data.status === 'success') {
-                        updateStats(data.stats.in, data.stats.out);
-                    } else {
-                        textStats.innerHTML = `<span class="text-danger">${data.message}</span>`;
-                    }
-                } catch(err) {
-                    textStats.innerHTML = `<span class="text-danger">Akses Ditolak: Pastikan URL benar & Deployment "Anyone"</span>`;
-                }
-            })
+            .then(res => res.json())
+            .then(data => { if(data.status === 'success') updateStats(data.stats.in, data.stats.out); })
             .catch(err => { textStats.innerHTML = `<span class="text-danger">Gagal memuat statistik.</span>`; });
 
-        // Paksa input tetap fokus
-        document.addEventListener('click', () => { if(document.activeElement !== docInput) docInput.focus(); });
+        // Paksa Autofocus Cerdas (Selalu kembali ke input yang aktif/diperlukan)
+        document.addEventListener('click', () => {
+            if (document.activeElement !== docInput && document.activeElement !== timInput) {
+                if (!timInput.disabled) { timInput.focus(); } else { docInput.focus(); }
+            }
+        });
 
-        // 2. Fetch Form Scan
+        // Fungsi Reset Form & Kembalikan Fokus ke Dokumen
+        function resetForm() {
+            docInput.value = '';
+            timInput.value = '';
+            docInput.disabled = false;
+            timInput.disabled = true;
+            timInput.placeholder = "Menunggu dokumen...";
+            docInput.focus();
+        }
+
+        // Proses Form Submission (Scan dari Barcode Reader)
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            const docNumber = docInput.value.trim();
-            if (!docNumber) return;
+            const doc = docInput.value.trim();
+            const tim = timInput.value.trim();
+            if (!doc) return;
 
-            submitBtn.disabled = true;
-            submitBtn.innerText = "Memproses...";
             docInput.disabled = true;
-            alertArea.innerHTML = "";
+            if (!timInput.disabled) timInput.disabled = true;
+            alertArea.innerHTML = `<div class="alert alert-secondary text-center fw-bold">Memproses...</div>`;
 
-            fetch(`${SCRIPT_URL}?docNumber=${encodeURIComponent(docNumber)}`, { method: 'GET', redirect: 'follow' })
-            .then(response => response.text()) // Ambil teks mentah
-            .then(text => {
-                try {
-                    const data = JSON.parse(text);
-                    if (data.status === 'success') {
-                        let bgColor = data.type === 'OUT' ? 'alert-info' : 'alert-success';
-                        alertArea.innerHTML = `<div class="alert ${bgColor} fw-bold text-center">${data.message}</div>`;
-                    } else {
-                        alertArea.innerHTML = `<div class="alert alert-danger fw-bold text-center">❌ ${data.message}</div>`;
-                    }
+            fetch(`${SCRIPT_URL}?docNumber=${encodeURIComponent(doc)}&timName=${encodeURIComponent(tim)}`, { method: 'GET', redirect: 'follow' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'pending' && data.type === 'NEED_TIM') {
+                    // Dokumen Baru Terdeteksi! Minta scan TIM.
+                    alertArea.innerHTML = `<div class="alert alert-warning fw-bold text-center" style="color: #856404; background-color: #fff3cd;">${data.message}</div>`;
                     
+                    // Aktifkan input TIM, dan langsung pindahkan kursor
+                    timInput.disabled = false;
+                    timInput.placeholder = "";
+                    timInput.focus(); 
+                    
+                } else if (data.status === 'success') {
+                    // Berhasil OUT atau IN
+                    let bgColor = data.type === 'OUT' ? 'alert-info' : 'alert-success';
+                    alertArea.innerHTML = `<div class="alert ${bgColor} fw-bold text-center">${data.message}</div>`;
                     if (data.stats) updateStats(data.stats.in, data.stats.out);
-                } catch (e) {
-                    // Jika script GAS error parah/salah link, ini akan memunculkannya.
-                    alertArea.innerHTML = `<div class="alert alert-danger text-center">Gagal parsing data. Pastikan URL Web App benar dan di-deploy "Anyone".</div>`;
+                    resetForm();
+                    
+                } else {
+                    // Ditolak / Error
+                    alertArea.innerHTML = `<div class="alert alert-danger fw-bold text-center">❌ ${data.message}</div>`;
+                    resetForm();
                 }
             })
             .catch(error => {
                 alertArea.innerHTML = `<div class="alert alert-danger text-center">Koneksi Terputus. Periksa internet.</div>`;
-            })
-            .finally(() => {
-                docInput.value = '';
-                docInput.disabled = false;
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Proses Dokumen";
-                docInput.focus();
+                resetForm();
             });
         });
     </script>
